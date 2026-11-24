@@ -8,7 +8,7 @@ import { mkdtempSync, mkdirSync, readFileSync, symlinkSync, writeFileSync, lstat
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  buildPrompt, caddyConfig, humanCommentsSinceFactory, lastFactoryMarker, readJobFile, redact,
+  buildPrompt, caddyConfig, configuredProjects, humanCommentsSinceFactory, lastFactoryMarker, projectFor, readJobFile, redact,
   reworksSinceApproval, setFactoryLogin, writeJobFile, type Config,
 } from "./main.ts";
 
@@ -19,6 +19,28 @@ const cfg = (extra: Partial<Config> = {}): Config => ({
 });
 const c = (login: string, body: string) => ({ author: { login }, body, createdAt: "2026-11-11T10:00:00Z" });
 const issue = (comments: any[]) => ({ number: 7, title: "T", body: "B", url: "u", labels: [], comments });
+
+// ---------- Boards pro Repo ----------
+
+test("Board pro Repo: eigenes Board aus projects, sonst das Standard-Board", () => {
+  const conf = cfg({
+    project: { owner: "firma-b", number: 1 },
+    projects: { "firma-a/shop": { owner: "firma-a", number: 3 } },
+  });
+  assert.deepEqual(projectFor(conf, "https://github.com/firma-a/shop/issues/12"), { owner: "firma-a", number: 3 });
+  assert.deepEqual(projectFor(conf, "https://github.com/Firma-A/Shop/pull/13"), { owner: "firma-a", number: 3 });
+  assert.deepEqual(projectFor(conf, "https://github.com/firma-b/test/issues/1"), { owner: "firma-b", number: 1 });
+  assert.equal(projectFor(cfg(), "https://github.com/firma-b/test/issues/1"), undefined);
+});
+
+test("Board pro Repo: jedes Board wird genau einmal eingerichtet", () => {
+  const conf = cfg({
+    project: { owner: "firma-b", number: 1 },
+    projects: { "firma-a/shop": { owner: "firma-a", number: 3 }, "firma-a/app": { owner: "firma-a", number: 3 }, "firma-b/x": { owner: "firma-b", number: 1 } },
+  });
+  assert.deepEqual(configuredProjects(conf), [{ owner: "firma-b", number: 1 }, { owner: "firma-a", number: 3 }]);
+  assert.deepEqual(configuredProjects(cfg()), []);
+});
 
 // ---------- Dateien aus dem Job-Ordner ----------
 

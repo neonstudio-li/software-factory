@@ -42,10 +42,11 @@ if [ -f "$CONF" ] && jq -e '.factoryRepo == "AUTO"' "$CONF" >/dev/null 2>&1; the
   else echo "Hinweis: Für Verbesserungs-Vorschläge brauchst du eine eigene Kopie der Factory (Fork), siehe Anleitung."; fi
 fi
 
-# Board: vorhandenes verknüpfen, sonst einmalig anlegen
+# Board: eigenes Board des Repos aus "projects", sonst das Standard-Board "project"; fehlt beides, einmalig anlegen
+OWN_BOARD='(.projects // {} | to_entries | map(select((.key | ascii_downcase) == ($r | ascii_downcase))) | .[0].value)'
 NEW_BOARD=0
 if [ -f "$CONF" ]; then
-  if ! jq -e '(.project.number | type) == "number" and .project.owner != "DEIN-GITHUB-NAME"' "$CONF" >/dev/null 2>&1; then
+  if ! jq -e --arg r "$REPO" "$OWN_BOARD != null or ((.project.number | type) == \"number\" and .project.owner != \"DEIN-GITHUB-NAME\")" "$CONF" >/dev/null 2>&1; then
     OWNER="${REPO%%/*}"
     echo "Noch kein Board eingetragen, lege eins an ($OWNER):"
     NR=$(gh project create --owner "$OWNER" --title "Software Factory" --format json --jq .number) \
@@ -55,7 +56,8 @@ if [ -f "$CONF" ]; then
     echo "  ✓ Board $NR angelegt und in $CONF eingetragen"
     NEW_BOARD=1
   fi
-  OWNER=$(jq -r '.project.owner' "$CONF"); NR=$(jq -r '.project.number' "$CONF")
+  BOARD=$(jq -c --arg r "$REPO" "$OWN_BOARD // .project" "$CONF")
+  OWNER=$(jq -r '.owner' <<<"$BOARD"); NR=$(jq -r '.number' <<<"$BOARD")
   gh project link "$NR" --owner "$OWNER" --repo "$REPO" >/dev/null 2>&1 && echo "Mit Board $OWNER/$NR verknüpft." || true
   URL=$(gh project view "$NR" --owner "$OWNER" --format json --jq .url 2>/dev/null || true)
   [ -n "$URL" ] && echo "Board: $URL"

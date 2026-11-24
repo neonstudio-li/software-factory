@@ -26,6 +26,8 @@ export type Config = {
   /** GitHub-Nutzer, deren Kommentare die Factory als Antwort oder Änderungswunsch annimmt (zusätzlich zum eigenen Login) */
   allowedUsers?: string[];
   project?: { owner: string; number: number };
+  /** Eigenes Board pro Repo ("besitzer/repo" → Board). Repos ohne Eintrag nutzen `project`. */
+  projects?: Record<string, { owner: string; number: number }>;
   /** Factory-Repo, in dem der Verbesserungs-Lauf Vorschläge als Pull Request öffnet */
   factoryRepo?: string;
   /** Verbesserungs-Lauf automatisch alle X Tage (zusätzlich zu `factory-improve`). Standard: aus */
@@ -212,17 +214,37 @@ async function findPr(repo: string, n: number, state: "open" | "merged" | "all")
 // Spalten = Standardfeld "Status" des Boards. Zusatzfeld "Schritt" zeigt bei "In Arbeit" den genauen Schritt.
 
 type BoardField = { id: string; options: Record<string, string> };
-let board: { id: string; status: BoardField; step: BoardField } | null = null;
+type Board = { id: string; status: BoardField; step: BoardField };
+type ProjectRef = { owner: string; number: number };
+const boards = new Map<string, Board>(); // "owner/number" → eingerichtetes Board
 const boardItems = new Map<string, { itemId: string; key?: string }>();
+const missingBoards = new Set<string>();
+
+const boardKey = (p: ProjectRef) => `${p.owner}/${p.number}`;
+
+/** Board für ein Issue oder einen PR: eigenes Board des Repos aus `projects`, sonst das Standard-Board `project`. */
+export function projectFor(cfg: Config, url: string): ProjectRef | undefined {
+  const repo = url.match(/github\.com\/([^/]+\/[^/]+)\/(?:issues|pull)\//i)?.[1]?.toLowerCase();
+  const own = repo ? Object.entries(cfg.projects ?? {}).find(([r]) => r.toLowerCase() === repo)?.[1] : undefined;
+  return own ?? cfg.project;
+}
+
+/** Alle Boards, die die Konfiguration nennt, ohne Doppelte. */
+export function configuredProjects(cfg: Config): ProjectRef[] {
+  const all = [cfg.project, ...Object.values(cfg.projects ?? {})].filter((p): p is ProjectRef => !!p);
+  return [...new Map(all.map((p) => [boardKey(p), p])).values()];
+}
 
 async function fieldList(owner: string, number: number) {
   return JSON.parse(await gh(["project", "field-list", String(number), "--owner", owner, "--format", "json"])).fields as any[];
 }
 const toField = (f: any): BoardField => ({ id: f.id, options: Object.fromEntries((f.options ?? []).map((o: any) => [o.name, o.id])) });
 
-async function initBoard(cfg: Config) {
-  if (!cfg.project) return;
-  const { owner, number } = cfg.project;
+async function initBoards(cfg: Config) {
+  for (const p of configuredProjects(cfg)) await initBoard(p);
+}
+
+async function initBoard({ owner, number }: ProjectRef) {
   try {
     const project = JSON.parse(await gh(["project", "view", String(number), "--owner", owner, "--format", "json"]));
     let fields = await fieldList(owner, number);
@@ -244,15 +266,25 @@ async function initBoard(cfg: Config) {
     if (legacy) await gh(["project", "field-delete", "--id", legacy.id]);
 
     fields = await fieldList(owner, number);
-    board = { id: project.id, status: toField(fields.find((f) => f.name === "Status")), step: toField(fields.find((f) => f.name === "Schritt")) };
-    log("board:ready", { project: project.title });
+    boards.set(boardKey({ owner, number }), {
+      id: project.id, status: toField(fields.find((f) => f.name === "Status")), step: toField(fields.find((f) => f.name === "Schritt")),
+    });
+    log("board:ready", { project: project.title, board: `${owner}/${number}` });
   } catch (e) {
-    log("board:error", { error: String(e) });
+    log("board:error", { board: `${owner}/${number}`, error: String(e) });
   }
 }
 
 async function syncBoard(cfg: Config, url: string, status: string, step?: string) {
-  if (!board || !cfg.project) return;
+  const project = projectFor(cfg, url);
+  if (!project) return;
+  const board = boards.get(boardKey(project));
+  if (!board) {
+    // Neu eingetragene Boards richtet der Runner erst beim nächsten Start ein
+    if (!missingBoards.has(boardKey(project))) log("board:not-ready", { board: boardKey(project), hint: "systemctl restart software-factory" });
+    missingBoards.add(boardKey(project));
+    return;
+  }
   const optionId = board.status.options[STATUS[status]?.name];
   if (!optionId) return;
   const key = `${status}:${step ?? ""}`;
@@ -260,7 +292,7 @@ async function syncBoard(cfg: Config, url: string, status: string, step?: string
   if (entry?.key === key) return;
   try {
     if (!entry) {
-      const item = JSON.parse(await gh(["project", "item-add", String(cfg.project.number), "--owner", cfg.project.owner, "--url", url, "--format", "json"]));
+      const item = JSON.parse(await gh(["project", "item-add", String(project.number), "--owner", project.owner, "--url", url, "--format", "json"]));
       entry = { itemId: item.id };
       boardItems.set(url, entry);
     }
@@ -787,7 +819,7 @@ async function main() {
   }
   CONTAINER_UID = Number((await docker(["run", "--rm", "--entrypoint", "id", cfg.image, "-u"])).trim());
   FACTORY_LOGIN = (await gh(["api", "user", "--jq", ".login"])).trim();
-  await initBoard(cfg);
+  await initBoards(cfg);
   log("runner:started", {
     login: FACTORY_LOGIN, allowedUsers: cfg.allowedUsers ?? [],
     preview: cfg.preview ? previewLink(cfg, 1).replace(/:4001$/, ":4001…") : "aus",
