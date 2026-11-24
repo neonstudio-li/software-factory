@@ -100,6 +100,8 @@ Die Factory liest `.factory/setup.json` im Ziel-Repo:
 }
 ```
 
+Optional nennt `"skills": [...]` zusätzliche Skills für die Agenten: Namen aus der privaten Skill-Bibliothek des Servers (`/var/lib/software-factory/skills`, liegt nicht im Repo) oder Ordner im Ziel-Repo mit eigenen Skills (z. B. `".alpine/skills"`). Die Agenten sehen sich zu Beginn jeder Phase alle Skills an, wenden passende an und nennen sie im Pull Request.
+
 `/init` legt sie passend zum Stack an. Braucht dein Stack eine andere Laufzeit als Node oder Python, ergänzt `/init` eine `.factory/Dockerfile`, die auf dem Factory-Image aufbaut.
 
 ## Claude-Abo: was ist erlaubt?

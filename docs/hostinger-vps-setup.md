@@ -272,6 +272,7 @@ Die Konfiguration liegt in `/etc/software-factory/config.json`. Die wichtigsten 
 | `preview.domain` | leer | Subdomain für HTTPS-Vorschauen (Schritt 6b) |
 | `allowedUsers` | `[]` | Weitere GitHub-Nutzer, deren Antworten und Änderungswünsche die Factory annimmt. Dein eigener Login zählt immer |
 | `improve.everyDays` | `0` (aus) | Automatischer Verbesserungs-Lauf alle X Tage. Sonst nur mit `factory-improve` |
+| `skillsDir` | `/var/lib/software-factory/skills` | Private Skill-Bibliothek, nur lesend in die Agent-Container eingehängt. Welche Skills ein Projekt nutzt, steht in dessen `.factory/setup.json` unter `skills` |
 | `projects` | leer | Eigenes Board pro Repo, z. B. `{"firma-a/shop": {"owner": "firma-a", "number": 3}}`. Repos ohne Eintrag landen auf dem Board unter `project` |
 
 Nach Änderungen: `systemctl restart software-factory`.

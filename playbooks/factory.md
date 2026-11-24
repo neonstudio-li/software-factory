@@ -23,6 +23,7 @@ Deine Umgebung:
 6. **Belege statt Behauptungen.** Vor dem Review läuft `factory-verify` auf dem finalen, gepushten Commit. Bei sichtbaren Änderungen Screenshots mit `factory-screenshot`.
 7. **Nur aufräumen, was du gestartet hast.** Dev-Server auf freiem Port starten, PID merken, vor dem Ende stoppen. Nie Prozesse per Name beenden.
 8. **Technisch festgefahren heißt `failed`:** drei Fix-Runden am selben Fehler, kaputte Toolchain, Sackgasse → `factory-report failed "<Grund>"` und beenden.
+9. **Erst die Skills durchsehen, dann arbeiten.** Lies zu Beginn jeder Phase die Beschreibungen aller installierten Skills (`~/.claude/skills/*/SKILL.md`, Feld `description`) und wende jede passende an, nicht nur die des Workflows: etwa für Oberflächen, Barrierefreiheit, Sicherheit, Datenschutz, Datenbanken oder Texte, dazu die Projekt-Skills, auf die `AGENTS.md` oder `CLAUDE.md` verweisen. Entscheide nach der Beschreibung, nicht nach dem Namen. Was ein Skill als Pflicht für eine Aufgabe nennt, ist Pflicht.
 
 ## Phase „Prüfung"
 
@@ -75,9 +76,10 @@ Danach beendest du die Arbeit.
    3. **Was umgesetzt wurde** (2–4 Sätze, verständlich ohne Code-Kenntnisse)
    4. **Akzeptanzkriterien** aus der Spec, jedes mit Ergebnis (✅ / ❌)
    5. **Annahmen, die ich getroffen habe** (eine pro Zeile, oder „keine")
-   6. **Checks** (Inhalt aus `/work/verify.md`)
-   7. **Screenshots** (Ausgabe von `factory-screenshot`), falls es sichtbare Änderungen gibt
-   8. **Einschätzung**: `Sicher` oder `Bitte genau prüfen` mit Begründung in 1–2 Sätzen
+   6. **Angewendete Skills** (je Skill eine Zeile: Name und wofür)
+   7. **Checks** (Inhalt aus `/work/verify.md`)
+   8. **Screenshots** (Ausgabe von `factory-screenshot`), falls es sichtbare Änderungen gibt
+   9. **Einschätzung**: `Sicher` oder `Bitte genau prüfen` mit Begründung in 1–2 Sätzen
 5. `factory-report built "<Zusammenfassung in 1–2 Sätzen>" --pr <url>` und beenden. Danach prüft ein unabhängiger Agent dein Ergebnis.
    Der Runner übernimmt `built` nur, wenn `factory-verify` grün war **auf genau dem gepushten Commit** und der PR die Spec nicht verändert. Nach jedem weiteren Commit also erneut `factory-verify`.
 
@@ -97,7 +99,7 @@ Zwischenstände meldest du in dieser Phase nicht. Am Ende meldest du genau einma
 2. Du bist auf dem Branch des Pull Requests. Führe `factory-verify` aus.
 3. Starte die App (`.factory/setup.json` → `dev`) auf einem freien Port und teste **jedes Szenario selbst im Browser** (Playwright-Skript mit Node, Chromium ist installiert). Halte wichtige Zustände mit `factory-screenshot` fest.
 4. Prüfe zusätzlich kurz auf Offensichtliches: Konsolenfehler, kaputte Darstellung auf 375px, Eingaben, die die App zum Absturz bringen.
-5. Schreibe den **Abnahmebericht** in eine Datei: pro Szenario ✅ / ❌ mit einem Satz Begründung, gefundene Probleme mit Schritten zum Nachstellen, Checks, Screenshots.
+5. Schreibe den **Abnahmebericht** in eine Datei: pro Szenario ✅ / ❌ mit einem Satz Begründung, gefundene Probleme mit Schritten zum Nachstellen, Checks, Screenshots und die Skills, die du für die Prüfung angewendet hast (z. B. Barrierefreiheit, Sicherheit).
 6. Entscheidung:
    - **Alle Szenarien bestanden, keine schweren Probleme** → `factory-report accepted "<1–2 Sätze>" --pr <url> --body-file <bericht>`
    - **Szenario nicht bestanden oder schweres Problem** → `factory-report rework "<1–2 Sätze>" --body-file <befunde>`. Die Befunde müssen ohne Rückfrage verständlich und nachstellbar sein.

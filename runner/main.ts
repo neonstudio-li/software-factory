@@ -26,6 +26,8 @@ export type Config = {
   /** GitHub-Nutzer, deren Kommentare die Factory als Antwort oder Änderungswunsch annimmt (zusätzlich zum eigenen Login) */
   allowedUsers?: string[];
   project?: { owner: string; number: number };
+  /** Private Skill-Bibliothek auf dem Server, nur lesend in die Agent-Container eingehängt. Standard: <dataDir>/skills */
+  skillsDir?: string;
   /** Eigenes Board pro Repo ("besitzer/repo" → Board). Repos ohne Eintrag nutzen `project`. */
   projects?: Record<string, { owner: string; number: number }>;
   /** Factory-Repo, in dem der Verbesserungs-Lauf Vorschläge als Pull Request öffnet */
@@ -313,6 +315,12 @@ const jobDir = (cfg: Config, repo: string, n: number) => join(cfg.dataDir, "jobs
 const scenarioDir = (cfg: Config, repo: string, n: number) => join(cfg.dataDir, "scenarios", `${repo.replace("/", "__")}__${n}`);
 const agentLimits = (cfg: Config) => ["--memory", cfg.containerMemory, "--memory-swap", cfg.containerMemory, "--pids-limit", "4096", "--shm-size", "1g"];
 
+/** Skill-Bibliothek des Servers für die Agenten, nur lesend. Fehlt der Ordner, läuft alles wie bisher. */
+export function skillMount(cfg: Config, exists: (p: string) => boolean = existsSync): string[] {
+  const dir = cfg.skillsDir ?? join(cfg.dataDir, "skills");
+  return exists(dir) ? ["-v", `${dir}:/factory/extra-skills:ro`] : [];
+}
+
 async function listContainers(): Promise<Container[]> {
   const names = (await docker(["ps", "-a", "--filter", "label=software-factory=1", "--format", "{{.Names}}"])).split("\n").filter(Boolean);
   const result: Container[] = [];
@@ -411,7 +419,7 @@ async function launch(cfg: Config, repo: string, issue: Issue, phase: Phase, mod
     "-e", `REPO=${repo}`, "-e", `ISSUE=${issue.number}`, "-e", `BRANCH=factory/${issue.number}`,
     "-e", `MODEL=${cfg.model}`, "-e", `WORKFLOW=${cfg.workflow}`, "-e", `PHASE=${phase}`,
     "-e", "GH_TOKEN", "-e", authVar, // Werte kommen aus der Umgebung, nicht aus der Kommandozeile
-    "-v", `${dir}:/work`, ...scenarioMount,
+    "-v", `${dir}:/work`, ...scenarioMount, ...skillMount(cfg),
     await imageFor(cfg, repo),
   ], { GH_TOKEN: ghToken });
   log("job:started", { repo, issue: issue.number, phase, mode, container: name });

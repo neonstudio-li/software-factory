@@ -40,6 +40,9 @@ else
   git checkout --quiet -B "$BRANCH" "origin/$DEFAULT_BRANCH"
 fi
 
+# Projekt-Skills aus .factory/setup.json ("skills"): Bibliothek des Servers oder Ordner im Repo
+factory-skills "$HOME/.claude/skills" | sed 's/^/[factory] /' || true
+
 # Abhängigkeiten installieren (zum Entwickeln und für die Abnahme nötig)
 if [ "$PHASE" != "check" ] && [ -f .factory/setup.json ]; then
   INSTALL=$(jq -r '.install // empty' .factory/setup.json)

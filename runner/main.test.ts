@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   buildPrompt, caddyConfig, configuredProjects, humanCommentsSinceFactory, lastFactoryMarker, projectFor, readJobFile, redact,
-  reworksSinceApproval, setFactoryLogin, writeJobFile, type Config,
+  reworksSinceApproval, setFactoryLogin, skillMount, writeJobFile, type Config,
 } from "./main.ts";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "sf-test-"));
@@ -163,6 +163,42 @@ test("factory-verify: grün nur, wenn alle Checks bestehen", () => {
   const bad = verifyRepo('{"checks": {"lint": "true", "test": "exit 3"}}');
   assert.equal(bad.code, 1);
   assert.equal(bad.verify.ok, false);
+});
+
+// ---------- Skills für die Agenten ----------
+
+const SKILLS = join(import.meta.dirname, "..", "image", "bin", "factory-skills");
+
+test("factory-skills: Bibliothek und Repo-Ordner, nichts von außerhalb", () => {
+  const lib = tmp(), repo = tmp(), dest = tmp(), outside = tmp();
+  const skill = (dir: string) => { mkdirSync(dir, { recursive: true }); writeFileSync(join(dir, "SKILL.md"), "---\nname: x\n---\n"); };
+  skill(join(lib, "ui-check"));
+  skill(join(repo, "vendor", "skills", "tdd"));
+  skill(join(repo, "vendor", "skills", "review"));
+  skill(join(repo, "single"));
+  skill(join(outside, "evil"));
+  mkdirSync(join(repo, ".factory"), { recursive: true });
+  writeFileSync(join(repo, ".factory", "setup.json"), JSON.stringify({
+    skills: ["ui-check", "vendor/skills", "./single", "fehlt", `../${outside.split(/[\\/]/).pop()}/evil`, "../../etc"],
+  }));
+  const r = spawnSync("bash", [SKILLS, dest], { cwd: repo, env: { ...process.env, FACTORY_SKILL_LIBRARY: lib }, encoding: "utf8" });
+  assert.equal(r.status, 0);
+  for (const s of ["ui-check", "tdd", "review", "single"]) assert.ok(lstatSync(join(dest, s, "SKILL.md")).isFile(), s);
+  assert.throws(() => lstatSync(join(dest, "evil")));
+  assert.match(r.stderr, /fehlt/);
+});
+
+test("factory-skills: ohne Angaben passiert nichts", () => {
+  const repo = tmp(), dest = tmp();
+  const r = spawnSync("bash", [SKILLS, dest], { cwd: repo, encoding: "utf8" });
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout, "");
+});
+
+test("Skill-Bibliothek wird nur eingehängt, wenn es sie gibt, und nur lesend", () => {
+  assert.deepEqual(skillMount(cfg({ dataDir: "/data" }), () => true), ["-v", "/data/skills:/factory/extra-skills:ro"]);
+  assert.deepEqual(skillMount(cfg({ skillsDir: "/srv/skills" }), () => true), ["-v", "/srv/skills:/factory/extra-skills:ro"]);
+  assert.deepEqual(skillMount(cfg(), () => false), []);
 });
 
 // ---------- Auswertung eines beendeten Laufs (GitHub und Docker simuliert) ----------

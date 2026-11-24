@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# Stellt die Skills bereit, die das Projekt in .factory/setup.json unter "skills" nennt.
+#   Name ohne Schrägstrich → aus der Skill-Bibliothek des Servers (/factory/extra-skills/<name>, nur lesend eingehängt)
+#   Pfad im Repo           → der Ordner selbst, wenn er eine SKILL.md hat, sonst jeder Unterordner mit SKILL.md
+# Fehlende Einträge sind nur eine Warnung: ein Lauf scheitert nie an einem Skill.
+#
+#   factory-skills [ziel]   (im Repo-Ordner aufrufen, Standard-Ziel: ~/.claude/skills)
+set -uo pipefail
+
+DEST="${1:-$HOME/.claude/skills}"
+LIB="${FACTORY_SKILL_LIBRARY:-/factory/extra-skills}"
+mkdir -p "$DEST"
+[ -f .factory/setup.json ] || exit 0
+
+mapfile -t ENTRIES < <(jq -r '.skills // [] | if type == "array" then .[] else empty end | select(type == "string")' .factory/setup.json 2>/dev/null)
+REPO_DIR="$(pwd -P)"
+ok=(); missing=()
+
+install_dir() { # $1 = Quellordner mit SKILL.md
+  local name; name="$(basename "$1")"
+  rm -rf "${DEST:?}/$name"
+  cp -rL "$1" "$DEST/$name" && ok+=("$name")
+}
+
+for e in "${ENTRIES[@]}"; do
+  if [[ "$e" == */* || "$e" == .* ]]; then
+    src="$(realpath -m -- "$e")"
+    case "$src" in "$REPO_DIR"/*) ;; *) missing+=("$e (liegt außerhalb des Repos)"); continue ;; esac
+    if [ -f "$src/SKILL.md" ]; then
+      install_dir "$src"
+    elif [ -d "$src" ]; then
+      found=0
+      for d in "$src"/*/; do
+        [ -f "${d}SKILL.md" ] || continue
+        install_dir "${d%/}"; found=1
+      done
+      [ "$found" = 1 ] || missing+=("$e (keine SKILL.md)")
+    else
+      missing+=("$e")
+    fi
+  elif [[ "$e" =~ ^[A-Za-z0-9._-]+$ ]] && [ -f "$LIB/$e/SKILL.md" ]; then
+    install_dir "$LIB/$e"
+  else
+    missing+=("$e")
+  fi
+done
+
+[ ${#ok[@]} -gt 0 ] && echo "Skills bereitgestellt: ${ok[*]}"
+[ ${#missing[@]} -gt 0 ] && echo "Skills nicht gefunden: ${missing[*]}" >&2
+exit 0
